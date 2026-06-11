@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const DEFAULT_MODEL = 'gemini-2.0-flash';
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 function loadApiKey() {
   const envPath = resolve('.env.local');
