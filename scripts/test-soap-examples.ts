@@ -53,6 +53,20 @@ function extractSpeakerTags(text: string): string[] {
   return [...new Set(matches)].sort();
 }
 
+/** 主体タグの同義グループ（再現テスト用。入力が「介護スタッフ」でも [スタッフ] と同等とみなす） */
+const SPEAKER_TAG_ALIASES: Record<string, string> = {
+  '[介護スタッフ]': '[スタッフ]',
+  '[介護士]': '[スタッフ]',
+};
+
+function normalizeSpeakerTag(tag: string): string {
+  return SPEAKER_TAG_ALIASES[tag] ?? tag;
+}
+
+function normalizeSpeakerTags(tags: string[]): string[] {
+  return [...new Set(tags.map(normalizeSpeakerTag))].sort();
+}
+
 function extractDrugNames(objective: string): string[] {
   const drugs: string[] = [];
   const lines = objective.split('\n');
@@ -149,6 +163,12 @@ function checkPrimaryProblem(
   return { pass, actualHint: actualFirst ?? '（A 先頭行なし）' };
 }
 
+function isSpeakerTagAliasDiff(expectedLine: string, actualLine: string): boolean {
+  const normalizeLineTags = (line: string) =>
+    line.replace(/\[[^\]]+\]/g, (tag) => normalizeSpeakerTag(tag));
+  return normalizeLineTags(expectedLine) === normalizeLineTags(actualLine);
+}
+
 function findWordingDiffs(expected: Soap, actual: Soap): string[] {
   const diffs: string[] = [];
 
@@ -166,6 +186,7 @@ function findWordingDiffs(expected: Soap, actual: Soap): string[] {
       const a = actLines[i];
       if (!e || !a) continue;
       if (e !== a) {
+        if (field === 'subjective' && isSpeakerTagAliasDiff(e, a)) continue;
         diffs.push(`${label}[${i + 1}] 文言相違:\n  期待: ${e}\n  出力: ${a}`);
       }
     }
@@ -187,8 +208,8 @@ function evaluateCase(
   generated: Soap,
   elapsedSec: number,
 ): CaseEvaluation {
-  const expectedTags = extractSpeakerTags(expected.subjective);
-  const actualTags = extractSpeakerTags(generated.subjective);
+  const expectedTags = normalizeSpeakerTags(extractSpeakerTags(expected.subjective));
+  const actualTags = normalizeSpeakerTags(extractSpeakerTags(generated.subjective));
   const missingTags = expectedTags.filter((t) => !actualTags.includes(t));
   const extraTags = actualTags.filter((t) => !expectedTags.includes(t));
 
