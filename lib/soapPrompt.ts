@@ -1,5 +1,6 @@
-import { Schema, SchemaType } from '@google/generative-ai';
-import { ClinicalData } from '../types';
+import { SchemaType } from '@google/generative-ai';
+import type { Schema } from '@google/generative-ai';
+import type { ClinicalData } from '../types.ts';
 
 // =============================================================================
 // プロンプト設定（セクション単位 ON/OFF）

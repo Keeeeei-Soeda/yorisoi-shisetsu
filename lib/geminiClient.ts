@@ -1,4 +1,5 @@
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { GenerativeModel } from '@google/generative-ai';
 
 /** デフォルトの生成モデル（SOAP 整形用途） */
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
