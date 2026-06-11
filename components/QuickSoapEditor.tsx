@@ -72,7 +72,7 @@ const SoapSectionEditor: React.FC<SoapSectionEditorProps> = ({ section, value, o
       <span className="text-xs text-gray-400 whitespace-nowrap">{value.length} 文字</span>
     </div>
     <textarea
-      className="w-full min-h-[140px] resize-y rounded-lg border border-gray-200 bg-gray-50 p-3 text-sm leading-relaxed text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-400"
+      className="w-full min-h-[140px] resize-y rounded-lg border border-gray-200 bg-gray-50 p-3 text-base leading-relaxed text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-400 md:text-sm"
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={section.title}

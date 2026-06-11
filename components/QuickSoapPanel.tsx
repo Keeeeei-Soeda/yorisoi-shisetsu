@@ -157,7 +157,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-4 md:space-y-6 md:p-6">
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h2 className="text-2xl font-bold text-gray-900">メモから SOAP 作成</h2>
         <p className="text-sm text-gray-500 mt-1">
@@ -170,7 +170,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-600">1. 訪問先</label>
             <select
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
               value={facilityId}
               onChange={(e) => {
                 setFacilityId(e.target.value);
@@ -189,7 +189,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
             <label className="text-xs font-semibold text-gray-600">3. 訪問日</label>
             <input
               type="date"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
@@ -202,7 +202,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
             <button
               type="button"
               onClick={() => setPatientMode('roster')}
-              className={`px-3 py-1.5 text-sm rounded border ${
+              className={`min-h-[44px] rounded border px-3 py-2.5 text-sm md:min-h-0 md:py-1.5 ${
                 patientMode === 'roster'
                   ? 'bg-teal-500 text-white border-teal-600'
                   : 'bg-white text-gray-600 border-gray-200'
@@ -213,7 +213,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
             <button
               type="button"
               onClick={() => setPatientMode('new')}
-              className={`px-3 py-1.5 text-sm rounded border ${
+              className={`min-h-[44px] rounded border px-3 py-2.5 text-sm md:min-h-0 md:py-1.5 ${
                 patientMode === 'new'
                   ? 'bg-teal-500 text-white border-teal-600'
                   : 'bg-white text-gray-600 border-gray-200'
@@ -225,7 +225,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
 
           {patientMode === 'roster' ? (
             <select
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
               value={rosterPatientId}
               onChange={(e) => setRosterPatientId(e.target.value)}
             >
@@ -240,7 +240,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
           ) : (
             <input
               type="text"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
               placeholder="患者名を入力（例: 山田 太郎）"
               value={patientNameOverride}
               onChange={(e) => setPatientNameOverride(e.target.value)}
@@ -251,7 +251,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
         <div className="space-y-2">
           <label className="text-xs font-semibold text-gray-600">4. 箇条書きメモ</label>
           <textarea
-            className="w-full min-h-[180px] border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            className="w-full min-h-[180px] rounded-lg border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
             placeholder={BULLET_PLACEHOLDER}
             value={bulletInput}
             onChange={(e) => setBulletInput(e.target.value)}
@@ -262,7 +262,7 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
           type="button"
           onClick={runGenerate}
           disabled={loading || bulletInput.trim().length < 10}
-          className="px-4 py-2 text-sm font-bold rounded border shadow-sm bg-teal-500 text-white border-teal-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="min-h-[44px] rounded border px-4 py-3 text-sm font-bold shadow-sm md:min-h-0 md:py-2 bg-teal-500 text-white border-teal-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? '生成中…' : 'SOAP生成'}
         </button>
@@ -283,21 +283,21 @@ export const QuickSoapPanel: React.FC<QuickSoapPanelProps> = ({ onToast }) => {
             <button
               type="button"
               onClick={handleSave}
-              className="px-4 py-2 text-sm font-bold rounded border shadow-sm bg-teal-500 text-white border-teal-600"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-bold shadow-sm md:min-h-0 md:py-2 bg-teal-500 text-white border-teal-600"
             >
               保存
             </button>
             <button
               type="button"
               onClick={runGenerate}
-              className="px-4 py-2 text-sm font-medium rounded border bg-white text-gray-700 border-gray-200"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-medium md:min-h-0 md:py-2 bg-white text-gray-700 border-gray-200"
             >
               再生成
             </button>
             <button
               type="button"
               onClick={handleClear}
-              className="px-4 py-2 text-sm font-medium rounded border bg-gray-100 text-gray-600 border-gray-200"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-medium md:min-h-0 md:py-2 bg-gray-100 text-gray-600 border-gray-200"
             >
               クリア
             </button>

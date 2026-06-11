@@ -168,7 +168,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           type="button"
           onClick={handleStart}
           disabled={disabled || isStarting}
-          className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-red-600 bg-red-500 px-6 py-8 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex min-h-[44px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-red-600 bg-red-500 px-6 py-8 text-white shadow-sm transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50 md:py-8"
         >
           <span className="text-3xl" aria-hidden>
             🎤
@@ -218,7 +218,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             type="button"
             onClick={handlePauseToggle}
             disabled={disabled}
-            className="flex-1 rounded border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="flex min-h-[44px] flex-1 items-center justify-center rounded border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 md:min-h-0 md:py-2"
           >
             {isPaused ? '再開' : '一時停止'}
           </button>
@@ -226,7 +226,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             type="button"
             onClick={handleStop}
             disabled={disabled}
-            className="flex-1 rounded border border-gray-700 bg-gray-700 px-4 py-2 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50"
+            className="flex min-h-[44px] flex-1 items-center justify-center rounded border border-gray-700 bg-gray-700 px-4 py-3 text-sm font-bold text-white hover:bg-gray-800 disabled:opacity-50 md:min-h-0 md:py-2"
           >
             停止
           </button>
@@ -251,7 +251,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           type="button"
           onClick={handleConfirm}
           disabled={disabled || !recordedBlob}
-          className="flex-1 rounded border border-teal-600 bg-teal-500 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-teal-600 disabled:opacity-50"
+          className="flex min-h-[44px] flex-1 items-center justify-center rounded border border-teal-600 bg-teal-500 px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-teal-600 disabled:opacity-50 md:min-h-0 md:py-2"
         >
           SOAP生成
         </button>
@@ -259,7 +259,7 @@ export const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
           type="button"
           onClick={handleDiscard}
           disabled={disabled}
-          className="flex-1 rounded border border-gray-200 bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50"
+          className="flex min-h-[44px] flex-1 items-center justify-center rounded border border-gray-200 bg-gray-100 px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-200 disabled:opacity-50 md:min-h-0 md:py-2"
         >
           破棄してやり直し
         </button>

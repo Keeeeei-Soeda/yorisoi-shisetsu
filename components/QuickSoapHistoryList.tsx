@@ -107,7 +107,7 @@ export const QuickSoapHistoryList: React.FC<QuickSoapHistoryListProps> = ({ onTo
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-4 md:space-y-6 md:p-6">
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h2 className="text-2xl font-bold text-gray-900">SOAP 履歴</h2>
         <p className="text-sm text-gray-500 mt-1">保存済みのクイック SOAP を検索・編集できます。</p>
@@ -117,7 +117,7 @@ export const QuickSoapHistoryList: React.FC<QuickSoapHistoryListProps> = ({ onTo
         <h3 className="text-sm font-bold text-gray-700">フィルタ</h3>
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
           <select
-            className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            className="border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
             value={facilityFilter}
             onChange={(e) => {
               setFacilityFilter(e.target.value);
@@ -132,7 +132,7 @@ export const QuickSoapHistoryList: React.FC<QuickSoapHistoryListProps> = ({ onTo
             ))}
           </select>
           <select
-            className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            className="border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
             value={patientFilter}
             onChange={(e) => setPatientFilter(e.target.value)}
           >
@@ -145,14 +145,14 @@ export const QuickSoapHistoryList: React.FC<QuickSoapHistoryListProps> = ({ onTo
           </select>
           <input
             type="date"
-            className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            className="border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
             aria-label="開始日"
           />
           <input
             type="date"
-            className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+            className="border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm"
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
             aria-label="終了日"
@@ -232,14 +232,14 @@ export const QuickSoapHistoryList: React.FC<QuickSoapHistoryListProps> = ({ onTo
                 <button
                   type="button"
                   onClick={handleSaveDetail}
-                  className="px-4 py-2 text-sm font-bold rounded border shadow-sm bg-teal-500 text-white border-teal-600"
+                  className="min-h-[44px] rounded border border-teal-600 bg-teal-500 px-4 py-3 text-sm font-bold text-white shadow-sm md:min-h-0 md:py-2"
                 >
                   保存
                 </button>
                 <button
                   type="button"
                   onClick={handleCopy}
-                  className="px-4 py-2 text-sm font-medium rounded border bg-teal-50 text-teal-700 border-teal-200"
+                  className="min-h-[44px] rounded border border-teal-200 bg-teal-50 px-4 py-3 text-sm font-medium text-teal-700 md:min-h-0 md:py-2"
                 >
                   コピー
                 </button>

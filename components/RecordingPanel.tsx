@@ -191,7 +191,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
+    <div className="mx-auto max-w-6xl space-y-4 p-4 md:space-y-6 md:p-6">
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
         <h2 className="text-2xl font-bold text-gray-900">録音から SOAP 作成</h2>
         <p className="text-sm text-gray-500 mt-1">
@@ -204,7 +204,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-600">1. 訪問先</label>
             <select
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-gray-50 disabled:text-gray-500"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               value={facilityId}
               disabled={formLocked}
               onChange={(e) => {
@@ -224,7 +224,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
             <label className="text-xs font-semibold text-gray-600">3. 訪問日</label>
             <input
               type="date"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-gray-50 disabled:text-gray-500"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               value={date}
               disabled={formLocked}
               onChange={(e) => setDate(e.target.value)}
@@ -239,7 +239,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
               type="button"
               disabled={formLocked}
               onClick={() => setPatientMode('roster')}
-              className={`px-3 py-1.5 text-sm rounded border disabled:opacity-50 ${
+              className={`min-h-[44px] rounded border px-3 py-2.5 text-sm md:min-h-0 md:py-1.5 ${
                 patientMode === 'roster'
                   ? 'bg-teal-500 text-white border-teal-600'
                   : 'bg-white text-gray-600 border-gray-200'
@@ -251,7 +251,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
               type="button"
               disabled={formLocked}
               onClick={() => setPatientMode('new')}
-              className={`px-3 py-1.5 text-sm rounded border disabled:opacity-50 ${
+              className={`min-h-[44px] rounded border px-3 py-2.5 text-sm md:min-h-0 md:py-1.5 ${
                 patientMode === 'new'
                   ? 'bg-teal-500 text-white border-teal-600'
                   : 'bg-white text-gray-600 border-gray-200'
@@ -263,7 +263,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
 
           {patientMode === 'roster' ? (
             <select
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-gray-50 disabled:text-gray-500"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               value={rosterPatientId}
               disabled={formLocked}
               onChange={(e) => setRosterPatientId(e.target.value)}
@@ -279,7 +279,7 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
           ) : (
             <input
               type="text"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400 disabled:bg-gray-50 disabled:text-gray-500"
+              className="w-full border border-gray-300 rounded px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-teal-400 md:py-2 md:text-sm disabled:bg-gray-50 disabled:text-gray-500"
               placeholder="患者名を入力（例: 山田 太郎）"
               value={patientNameOverride}
               disabled={formLocked}
@@ -319,14 +319,14 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
             <button
               type="button"
               onClick={handleRetryGenerate}
-              className="px-4 py-2 text-sm font-bold rounded border shadow-sm bg-teal-500 text-white border-teal-600"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-bold shadow-sm md:min-h-0 md:py-2 bg-teal-500 text-white border-teal-600"
             >
               SOAP生成を再試行
             </button>
             <button
               type="button"
               onClick={handleClear}
-              className="px-4 py-2 text-sm font-medium rounded border bg-white text-gray-700 border-gray-200"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-medium md:min-h-0 md:py-2 bg-white text-gray-700 border-gray-200"
             >
               クリア
             </button>
@@ -342,14 +342,14 @@ export const RecordingPanel: React.FC<RecordingPanelProps> = ({ onToast }) => {
             <button
               type="button"
               onClick={handleSave}
-              className="px-4 py-2 text-sm font-bold rounded border shadow-sm bg-teal-500 text-white border-teal-600"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-bold shadow-sm md:min-h-0 md:py-2 bg-teal-500 text-white border-teal-600"
             >
               保存
             </button>
             <button
               type="button"
               onClick={handleClear}
-              className="px-4 py-2 text-sm font-medium rounded border bg-gray-100 text-gray-600 border-gray-200"
+              className="min-h-[44px] rounded border px-4 py-3 text-sm font-medium md:min-h-0 md:py-2 bg-gray-100 text-gray-600 border-gray-200"
             >
               クリア
             </button>
