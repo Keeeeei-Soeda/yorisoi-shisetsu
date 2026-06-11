@@ -1,19 +1,52 @@
-# 要件定義書: 音声録音 → 自動 SOAP 生成機能（Phase 1 デモ特化 MVP）
+# 要件定義書: 音声録音 → 自動 SOAP 生成機能（Gemini Audio版）
 
 **対象リポジトリ**: `Keeeeei-Soeda/yorisoi-shisetsu`
-**ブランチ**: `feature/voice-recording`（新規ブランチ）
-**バージョン**: v1.0
+**ブランチ**: `feature/voice-recording`
+**バージョン**: v2.0（Gemini Audio構成）
 **ステータス**: ドラフト
 
 ---
 
 ## 1. 目的
 
-訪問薬剤師が**スマホで起動 → ボタン押下 → 患者と会話 → 自動的に SOAP 形式の薬歴が記録される**という体験を、Phase 1 として **デモ可能な MVP** として実装する。
+訪問薬剤師がスマホで起動 → ボタン押下 → 患者と会話 → 自動的に SOAP 形式の薬歴が記録される体験を、Phase 1 として **デモ可能な MVP** として実装する。
 
 これは Elan 提案・β顧客への提示・公式デモ動画素材として活用される。
 
-## 2. 体験設計（理想のユーザーフロー）
+## 2. アーキテクチャ（v2: Gemini Audio版）
+
+### v1（旧案）からの変更点
+
+| 項目 | v1（旧案） | v2（採用） |
+|---|---|---|
+| 文字起こし方式 | Google Cloud STT バッチ | **Gemini Audio**（音声→SOAP直接） |
+| バックエンド | Express + Cloud Run 必須 | **不要** |
+| WebSocket | 結果配信に使用 | **不要** |
+| 認証 | サービスアカウント JSON | **既存 GEMINI_API_KEY 流用** |
+| 工数 | 1-2週間 | **4-5日** |
+| メンテ対象 | フロント + バックエンド | **フロントのみ** |
+
+### システム構成
+
+```
+[スマホ] マイクボタン押下
+   ↓
+[録音開始] MediaRecorder API
+   ↓ (録音中表示、波形or時間カウンタ)
+[録音停止]
+   ↓
+[音声Blob] WebM/Opus (Chrome) or MP4 (iOS)
+   ↓ base64化
+[既存 Gemini API] inlineData で音声 + プロンプト送信
+   ↓
+[SOAP JSON] structured output
+   ↓
+[既存 QuickSoapEditor] 表示・編集
+   ↓
+[既存 quickSoapStorage] 履歴保存
+```
+
+## 3. 体験設計（ユーザーフロー）
 
 ```
 1. 訪問薬剤師がスマホで yorisoi-shisetsu を開く
@@ -24,222 +57,194 @@
    ↓
 4. 「録音開始」ボタンを押す（マイク許可）
    ↓
-5. 患者と通常通り会話（30秒〜3分程度）
-   ├─ 画面にリアルタイム文字起こしが表示される
+5. 患者と会話（30秒〜3分程度）
+   ├─ 画面に「録音中 mm:ss」と経過時間表示
+   └─ 任意: 音量レベルの波形表示
    ↓
 6. 「録音停止」ボタンを押す
    ↓
-7. AI が自動で：
-   ├─ 文字起こし完成
-   ├─ SOAP 形式に整理（既存 generateSoap 流用）
-   └─ 該当患者カルテに保存
+7. 自動処理（10-30秒）
+   ├─ 音声を base64 化
+   ├─ Gemini Audio に送信
+   ├─ ローディング「SOAP を生成中...」
+   └─ SOAP JSON を受信
    ↓
-8. SOAP が画面に表示される（編集可能）
+8. SOAP が画面に表示される（既存 QuickSoapEditor で編集可能）
    ↓
 9. 「保存」ボタンで履歴に追加
 ```
 
-## 3. 位置づけ：Phase 1 と Phase 2 の境界
+## 4. Phase 1 と Phase 2 の境界
 
 | 項目 | Phase 1（本書） | Phase 2（将来） |
 |---|---|---|
 | 患者数 | 1セッション = 1患者 | 複数患者の自動分割 |
-| 患者選択 | 録音前に手動選択 | 会話中に「タナカさん」等で自動振り分け |
-| 録音時間 | 30秒〜3分（短セッション） | 30分〜1時間（訪問丸ごと） |
-| 文字起こし | リアルタイム表示 | 同じ |
-| SOAP生成 | 録音停止後にバッチ | リアルタイム逐次 |
+| 患者選択 | 録音前に手動選択 | 会話中の患者名で自動振り分け |
+| 録音時間 | 30秒〜3分 | 30分〜1時間 |
+| 文字起こし表示 | なし（録音中は時間のみ） | リアルタイム逐次表示（要 Streaming STT 移行） |
+| SOAP生成 | 録音停止後にバッチ | 同 |
 | ターゲット | デモ・β顧客説明 | 実運用 |
-| 工数 | 1〜2週間 | 追加2〜3週間 |
+| 工数 | **4-5日** | 追加 1-2週間 |
 
-**Phase 2 の患者名自動抽出は本書のスコープ外**。Phase 1 完成後に β 顧客フィードバックを取って判断する。
-
-## 4. ターゲットユーザー
+## 5. ターゲットユーザー
 
 - メインユーザー: 訪問薬剤師（在宅・施設対応）
 - デモシーン: Elan 提案、β顧客面談、公式デモ動画
 
-## 5. 機能要件
+## 6. 機能要件
 
 | ID | 機能 | 優先度 | 受け入れ基準 |
 |---|---|---|---|
 | V-01 | 訪問先・患者の事前選択 | Must | 既存 FACILITIES の roster から選択可 |
-| V-02 | マイク許可・録音開始 | Must | iOS Safari, Chrome, Edge で動作 |
-| V-03 | リアルタイム文字起こし表示 | Must | 1-3秒遅延で逐次表示 |
+| V-02 | マイク許可・録音開始 | Must | Chrome / iOS Safari で動作 |
+| V-03 | 録音中の経過時間表示 | Must | mm:ss 形式でリアルタイム更新 |
 | V-04 | 録音停止ボタン | Must | 押下後に処理に移行 |
 | V-05 | 音声→SOAP自動生成 | Must | 30秒以内に SOAP 4セクション出力 |
 | V-06 | 既存 SOAP 編集機能との統合 | Must | QuickSoapEditor をそのまま使う |
-| V-07 | 履歴保存 | Must | QuickSoapRecord として localStorage に保存 |
-| V-08 | 録音中の波形表示 | Should | 音量レベル可視化（任意） |
-| V-09 | 録音時間表示 | Should | 経過時間カウンター |
-| V-10 | 録音停止後のキャンセル | Should | 「保存せず破棄」も選択可 |
+| V-07 | 履歴保存 | Must | QuickSoapRecord として localStorage 保存 |
+| V-08 | 録音中の音量レベル可視化 | Should | 簡易バーまたは波形（任意） |
+| V-09 | 録音停止後のキャンセル | Should | 「保存せず破棄」も選択可 |
+| V-10 | エラー時のフォールバック | Must | API エラー時は明確なメッセージ + 録音音声は保持 |
 
-## 6. 非機能要件
+## 7. 非機能要件
 
 | 項目 | 要件 |
 |---|---|
-| パフォーマンス | 文字起こし遅延 3秒以内、SOAP 生成 30秒以内 |
-| ブラウザ対応 | iOS Safari 16+, Android Chrome, デスクトップ Chrome / Edge |
-| 通信 | HTTPS 必須（マイク権限の制約） |
-| 永続化 | localStorage（Phase 1 は既存パターン踏襲） |
-| デプロイ | フロント: Vercel、バックエンド: Google Cloud Run |
-| コスト | 月数千円〜（デモ運用なら問題ない範囲） |
+| パフォーマンス | SOAP 生成 30秒以内（3分録音の場合） |
+| ブラウザ対応 | Chrome（最優先）、Edge、iOS Safari 16+（Phase 1.5） |
+| 通信 | HTTPS 必須（マイク権限の制約、localhost は例外） |
+| 永続化 | localStorage（既存パターン踏襲） |
+| デプロイ | フロント単体: Vercel（バックエンド不要） |
+| コスト | 月数百円〜（Gemini Audio は1分あたり約0.4円） |
 
-## 7. 技術スタック
+## 8. 技術スタック
 
 ### フロントエンド（既存 yorisoi-shisetsu に追加）
 
 | 用途 | 採用技術 |
 |---|---|
 | 録音 API | `MediaRecorder API`（標準） |
-| WebSocket クライアント | 標準 `WebSocket` API |
-| 音声フォーマット | `audio/webm; codecs=opus`（Chrome/Edge）<br>`audio/mp4`（iOS Safari）|
+| 音声フォーマット | `audio/webm; codecs=opus`（Chrome/Edge）<br>`audio/mp4`（iOS Safari） |
+| AI | **既存 Gemini 2.5 Flash + inlineData**（音声直接送信） |
 | UI | 既存 Tailwind パターン |
 
-### バックエンド（新設）
+### バックエンド
 
-| 用途 | 採用技術 |
-|---|---|
-| サーバー | Express + WebSocket（`ws` パッケージ） |
-| STT | Google Cloud Speech-to-Text（Streaming API） |
-| ランタイム | Node.js 20+ |
-| デプロイ | Google Cloud Run + Dockerfile |
-| 認証 | サービスアカウント JSON（GCP） |
+**不要**。フロント完結。
 
-### 参考リポ
+### Gemini Audio の使い方
 
-`y-mori29/yorisoi-demo` の `backend/` ディレクトリを参考にする。
-ただし、既存 yorisoi-shisetsu の構造と整合性を取るため、コピペではなく**再実装**。
+```typescript
+// 音声を Gemini に直接送信
+const result = await model.generateContent({
+  contents: [{
+    role: 'user',
+    parts: [
+      { 
+        inlineData: { 
+          mimeType: 'audio/webm', 
+          data: base64Audio 
+        } 
+      },
+      { text: systemPrompt + userMessage }
+    ]
+  }],
+  generationConfig: {
+    responseMimeType: 'application/json',
+    responseSchema: buildSoapJsonSchema(config),
+    temperature: 0.3,
+  }
+});
+```
 
-## 8. スコープ外（明示）
+## 9. スコープ外（明示）
 
 以下は Phase 1 では実装しない：
 
-- **患者名の自動抽出と振り分け**（Phase 2）
-- **複数患者の自動分割**（Phase 2）
-- **30分以上の長時間録音**（Phase 2）
-- バックエンド側 DB 永続化（Phase 1 は localStorage のみ）
-- ユーザー認証・薬局単位のテナント分離
+- リアルタイム文字起こし表示（Phase 2）
+- 患者名の自動抽出と振り分け（Phase 2）
+- 複数患者の自動分割（Phase 2）
+- 30分以上の長時間録音（Phase 2）
+- バックエンド・DB・認証
 - HIPAA / 医療情報安全管理ガイドライン完全準拠（本番化時）
-- 音声ファイルのサーバー保存（リアルタイム処理のみ）
+- 音声ファイルのサーバー保存
 - 多言語対応
-- 既存「メモから作成」機能の変更
+- 既存「メモから作成」「履歴」機能の変更
 
-## 9. 既存資産との関係
+## 10. 既存資産との関係
 
 | 既存資産 | 本機能での扱い |
 |---|---|
-| `FACILITIES` / `ROUNDS` (data/rounds.ts) | 患者選択 UI で参照 |
-| `ClinicalData` 型 (types.ts) | SOAP 生成結果の格納先 |
-| `QuickSoapRecord` 型 | 履歴保存に流用 |
-| `lib/generateSoap.ts` | 文字起こし → SOAP 生成に流用 |
-| `lib/soapPrompt.v3.ts` | プロンプトそのまま流用 |
-| `lib/formatters.ts` | コピー出力に流用 |
-| `lib/quickSoapStorage.ts` | 履歴保存に流用 |
-| `components/QuickSoapEditor.tsx` | 編集 UI に流用 |
-| `components/QuickSoapHistoryList.tsx` | 履歴一覧に流用 |
+| `lib/geminiClient.ts` | **そのまま流用**（getGeminiModel） |
+| `lib/soapPrompt.v3.ts` | **拡張流用**（音声入力用バージョン追加） |
+| `lib/generateSoap.ts` | テキスト用は維持、音声用は新規 audioToSoap.ts として作成 |
+| `lib/formatters.ts` | そのまま流用 |
+| `lib/quickSoapStorage.ts` | そのまま流用 |
+| `types.ts` の `QuickSoapRecord` | そのまま流用 |
+| `components/QuickSoapEditor.tsx` | そのまま流用 |
+| `components/QuickSoapHistoryList.tsx` | そのまま流用 |
 | 既存「録音から作成」モード（モック） | **本実装に置き換え** |
 
-## 10. ファイル構成（新規 + 変更）
+## 11. ファイル構成（新規 + 変更）
 
 ```
 yorisoi-shisetsu/
-├── backend/                          ← 新設
-│   ├── server.js                     ← Express + WebSocket メイン
-│   ├── stt.js                        ← Google Cloud STT 統合
-│   ├── package.json                  ← バックエンド専用 deps
-│   ├── Dockerfile                    ← Cloud Run 用
-│   ├── .env.example                  ← GCP 環境変数テンプレ
-│   └── .gitignore                    ← credentials JSON 除外
-├── lib/                              ← 既存 + 新規追加
-│   ├── voiceRecorder.ts              ← 新規: MediaRecorder ラッパー
-│   ├── wsClient.ts                   ← 新規: WebSocket クライアント
-│   └── transcriptToBullets.ts        ← 新規: 文字起こし → 箇条書き整形
-├── components/                       ← 既存 + 新規追加
-│   ├── RecordingPanel.tsx            ← 新規: 「録音から作成」モード本体
-│   ├── VoiceRecorder.tsx             ← 新規: 録音 UI コンポーネント
-│   └── TranscriptDisplay.tsx         ← 新規: リアルタイム表示
-├── App.tsx                           ← 変更: 既存「録音から作成」をモック→本実装に切替
+├── lib/
+│   ├── voiceRecorder.ts             ← 新規: MediaRecorder ラッパー
+│   ├── audioToSoap.ts               ← 新規: Gemini Audio 経由のSOAP生成
+│   └── (既存ファイルは変更なし)
+├── components/
+│   ├── VoiceRecorder.tsx            ← 新規: 録音 UI コンポーネント
+│   └── RecordingPanel.tsx           ← 新規: 「録音から作成」モード本体
+├── App.tsx                          ← 変更: 「録音から作成」モードを本実装に切替
 └── docs/
-    └── voice-feature-cursor-instructions.md   ← Cursor 指示書（別ファイル）
+    ├── voice-feature-requirements.md      ← 本書
+    └── voice-feature-cursor-instructions.md  ← 別ファイル
 ```
 
-## 11. リスクと対策
+## 12. リスクと対策
 
 | リスク | 内容 | 対策 |
 |---|---|---|
-| iOS Safari の音声フォーマット制約 | WebM/Opus 未対応 | サーバー側で ffmpeg 変換、または audio/mp4 出力 |
-| マイク権限が取れない | HTTPS 必須 | Vercel HTTPS デプロイ、ローカルは localhost で OK |
-| WebSocket 切断 | ネットワーク不安定 | 自動再接続ロジック実装 |
-| STT 認識精度 | 環境音・方言 | デモは静かな環境で実施、Phase 2 で精度向上 |
-| GCP 設定の複雑さ | サービスアカウント等 | 渓さん側で事前準備、Cursor は実装に集中 |
-| 既存機能への影響 | 「録音から作成」モックの置き換え | feature/voice-recording ブランチで分離 |
-| コスト爆発 | STT は従量課金 | デモのみ運用、月額アラート設定 |
-
-## 12. 渓さんが事前に準備すること
-
-Cursor 実装着手前に、**渓さんが GCP 側でセットアップする必要があります**：
-
-### 12.1 Google Cloud プロジェクト準備
-
-- [ ] [Google Cloud Console](https://console.cloud.google.com/) で既存プロジェクト確認、または新規作成
-- [ ] Speech-to-Text API を有効化
-- [ ] 課金有効化（Gemini API キーで使ったプロジェクトを流用すると楽）
-
-### 12.2 サービスアカウント作成
-
-- [ ] IAM & 管理 → サービスアカウント → 新規作成
-- [ ] 役割: 「Cloud Speech クライアント」を付与
-- [ ] キーをJSONでダウンロード（`~/yorisoi-shisetsu-gcp-credentials.json` 等で保管）
-- [ ] **このJSONファイルは絶対にGitにコミットしない**
-
-### 12.3 ローカル環境変数設定
-
-`backend/.env`（後で Cursor が作成）に以下を設定：
-
-```
-GOOGLE_APPLICATION_CREDENTIALS=/absolute/path/to/credentials.json
-PORT=8080
-NODE_ENV=development
-ALLOWED_ORIGINS=http://localhost:5173
-```
-
-### 12.4 Cloud Run デプロイ準備（デモ時のみ必要）
-
-- [ ] `gcloud` CLI インストール
-- [ ] `gcloud auth login` 実行
-- [ ] デプロイ手順は Cursor が `backend/README.md` に記載
+| Gemini Audio の医療用語精度 | 薬剤名等の認識精度 | 既存 v3 プロンプトを音声用に調整、Few-shot 追加 |
+| 音声ファイルサイズ上限 | 20MB | 3分以下なら問題なし（実測200-300KB/分） |
+| ブラウザ互換性 | iOS Safari の MIME | Phase 1 は Chrome 優先、iOS は Phase 1.5 |
+| マイク権限 | HTTPS 必須 | Vercel デプロイ + localhost 開発 |
+| API レスポンス時間 | 30秒超 | タイムアウト 60秒、進捗表示 |
+| 既存機能への影響 | モック置き換え | feature/voice-recording ブランチで分離 |
+| コスト爆発 | Audio は1分0.4円程度 | 月額アラート設定で監視 |
 
 ## 13. 成功指標
 
 Phase 1 完了の基準：
 
-- [ ] スマホ（iOS Safari）でマイクが起動する
-- [ ] 録音開始後、リアルタイム（3秒遅延以内）で文字起こしが表示される
-- [ ] 録音停止後、30秒以内に SOAP 4セクションが生成される
+- [ ] スマホ（Chrome）でマイクが起動する
+- [ ] 録音3分で SOAP 生成が30秒以内
+- [ ] 生成された SOAP が薬剤師目線で違和感ない品質
 - [ ] 既存の「メモから作成」「履歴」モードに影響がない
 - [ ] localhost で完全に動作する
-- [ ] Cloud Run + Vercel でデプロイ可能、公開 URL でデモ実施可能
-- [ ] Elan提案・β顧客面談で「これいいね」のリアクションを取れる
+- [ ] Vercel デプロイで公開 URL でデモ実施可能
+- [ ] Elan提案・β顧客面談で「これいいね」のリアクション
 
 ## 14. デモシナリオ（参考）
 
 ```
-1. iPhone で公開 URL を開く
+1. スマホで公開 URL を開く
 2. 「録音から作成」タブ
 3. さくら苑 / 田中健さん を選択
 4. 「録音開始」ボタン
-5. 話す: 「田中さん、最近どうですか？」
-   患者役: 「血圧が高めで、頭痛があるんです。最近薬を飲み忘れることもあって...」
-   話す: 「お薬カレンダー導入を提案します」
+5. 話す（例）:
+   "田中さんの今日の様子です。
+    血圧は120/70台で安定。降圧剤アムロジピン5mgを朝食後に継続服用中。
+    認知症が進行していて、本人からの訴えはほぼ聴取困難。
+    介護スタッフから、ここ3日便が出ていない、食事量も減少と報告。
+    残薬を確認すると約14日分蓄積している。
+    服薬支援を強化する必要がある。
+    次回までに看護師と排便コントロールを協議予定。"
 6. 「録音停止」ボタン
-7. 10秒待つ
-8. 画面に SOAP 形式の薬歴が表示される
-   - S: [本人] 頭痛あり、服薬忘れの自覚
-   - O: 田中健、特養入居...
-   - A: 血圧コントロール要評価、服薬アドヒアランス低下
-   - P: Ep: お薬カレンダー導入提案...
+7. 20秒待つ
+8. SOAP が画面表示される（v3 と同等品質を期待）
 9. 「保存」→ 履歴に追加
-10. 「履歴」タブで確認
 ```
 
-このシナリオを **3分以内** で実演できる状態が Phase 1 ゴール。
+3分以内で実演完了が Phase 1 ゴール。

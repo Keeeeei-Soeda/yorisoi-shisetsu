@@ -1,409 +1,489 @@
-# Cursor 実装指示書: 音声録音 → 自動 SOAP 生成機能（Phase 1 デモ特化 MVP）
+# Cursor 実装指示書: 音声録音 → 自動 SOAP 生成機能（Gemini Audio版）
 
 **対象リポジトリ**: `Keeeeei-Soeda/yorisoi-shisetsu`
-**ブランチ**: `feature/voice-recording`（新規切り出し）
+**ブランチ**: `feature/voice-recording`
 **前提**: `docs/voice-feature-requirements.md` を読み込んでから着手すること
-**参考リポ**: `y-mori29/yorisoi-demo`（Google Cloud STT + WebSocket の参考実装）
+**Phase 0 調査結果**: `docs/voice-feature-survey.md` を参考にする（ただし v1 案ベース、v2 では構成変更）
 
 ---
 
-## ⚠️ 事前準備（渓さんが実施済みであること）
+## ⚠️ Phase 0 からの変更点（重要）
 
-以下は渓さん側で完了している前提で着手してください：
+Phase 0 調査では Google Cloud STT + Express + WebSocket バックエンドを想定していたが、
+**v2 では Gemini Audio API を直接使う構成に変更** された。
 
-- [x] GCP プロジェクトで Speech-to-Text API 有効化
-- [x] サービスアカウント作成、credentials JSON ダウンロード
-- [x] credentials JSON のローカルパスが分かっている
-- [x] feature/voice-recording ブランチ切り出し済み
+**変更理由**:
+- yorisoi-demo に Streaming STT が実装されておらず、ゼロからの新規実装が必要だった
+- リアルタイム文字起こしは Phase 1 必須ではないと判明
+- バックエンド不要にすることで工数を 1-2週間 → 4-5日 に短縮
+- 既存の Gemini API キーをそのまま流用できる
 
-未完了の場合は、副田に確認してから進めること。
+**Phase 0 で出した backend/ 構築計画は破棄**し、本書の方針に従うこと。
 
 ---
 
 ## 全体方針
 
-- このリポジトリは Vite + React 19 + TypeScript + Tailwind CSS のプロトタイプ
-- 本機能は **「録音から作成」モードのモック実装を本実装に置き換える** タスク
-- バックエンドを **新設** する（既存 yorisoi-shisetsu はフロントオンリーだった）
+- Gemini 2.5 Flash の音声入力機能（inlineData）を使い、**音声 → SOAP を 1 ステップで生成**
+- バックエンド・WebSocket・STTサービス独立、**すべて不要**
 - 既存「メモから作成」「履歴」モードには **影響を与えない**
-- **段階的に実装**し、各 Phase 完了時にレビュー依頼
 - TypeScript 型を厳格に。`any` 使用禁止
 - コミットは論理的単位で分割、メッセージは日本語可
+- 各ステップ完了時に副田にレビュー依頼
 
 ---
 
-## Phase 0: 参考リポ調査と移植計画の作成
+## ステップ 1: 音声録音ユーティリティ
 
-### タスク
+### 新規ファイル: `lib/voiceRecorder.ts`
 
-`y-mori29/yorisoi-demo` の以下を調査し、`docs/voice-feature-survey.md` にまとめてください。
+`MediaRecorder API` のラッパークラスを実装する。
 
-#### 調査項目
+#### 機能要件
 
-1. **バックエンド構造**
-   - `backend/` のディレクトリ構成
-   - Express サーバーのエントリポイント
-   - WebSocket の確立方法
-   - クライアント接続管理
-
-2. **Google Cloud STT 統合**
-   - `@google-cloud/speech` パッケージの使い方
-   - Streaming API の呼び出し方法
-   - 認証方式（GOOGLE_APPLICATION_CREDENTIALS の使い方）
-   - エラーハンドリング
-   - 言語設定（`languageCode: 'ja-JP'` を使うこと）
-
-3. **フロントエンド構造**
-   - 音声録音 UI の実装パターン
-   - WebSocket クライアントの実装
-   - リアルタイム文字起こし表示の UI
-
-4. **音声フォーマット**
-   - 録音時の MIME タイプ
-   - WebM / Opus / MP4 / WAV のいずれを使っているか
-   - サーバー側での変換処理の有無
-
-5. **デプロイ設定**
-   - Dockerfile の内容
-   - 環境変数の管理方法
-   - Cloud Run デプロイコマンド
-
-### アウトプット
-
-`docs/voice-feature-survey.md` に以下を記載：
-
-```markdown
-# 参考リポ調査結果
-
-## バックエンド構造
-（yorisoi-demo の backend/ 構成）
-
-## STT 統合の実装パターン
-（コード抜粋付き）
-
-## フロント実装パターン
-（コード抜粋付き）
-
-## 本機能（yorisoi-shisetsu）への移植方針
-- そのまま流用できる部分
-- 改修が必要な部分
-- 新規実装が必要な部分
-
-## リスクと前提
-（実装時に注意すべき点）
-```
-
-### 制約
-
-- 既存ファイルの変更は禁止
-- 新規ファイルは `docs/voice-feature-survey.md` のみ
-- 完了後、副田にレビュー依頼
-
----
-
-## Phase 1: バックエンド構築
-
-### ステップ 1: backend/ ディレクトリ初期化
-
-**新規作成するファイル**：
-
-```
-backend/
-├── package.json
-├── server.js
-├── stt.js
-├── .env.example
-├── .gitignore
-└── README.md
-```
-
-#### `backend/package.json`
-
-```json
-{
-  "name": "yorisoi-shisetsu-backend",
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
-  },
-  "dependencies": {
-    "@google-cloud/speech": "^6.x",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "ws": "^8.18.0"
-  }
-}
-```
-
-#### `backend/.env.example`
-
-```
-GOOGLE_APPLICATION_CREDENTIALS=./credentials.json
-PORT=8080
-NODE_ENV=development
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
-```
-
-#### `backend/.gitignore`
-
-```
-node_modules/
-.env
-credentials.json
-*.json.key
-```
-
-#### `backend/README.md`
-
-ローカル起動手順とデプロイ手順を記載。
-
-### ステップ 2: Express + WebSocket サーバー実装
-
-`backend/server.js` を実装：
-
-- Express で `/health` エンドポイント（GET）を提供（疎通確認用）
-- `ws` パッケージで WebSocket サーバーを Express の HTTP サーバーに統合
-- WebSocket エンドポイント: `ws://localhost:8080/ws/transcribe`
-- CORS 設定で ALLOWED_ORIGINS のオリジンを許可
-- クライアント接続時に STT ストリーミングセッションを開始
-- クライアントから受信した音声バイナリチャンクを STT に転送
-- STT から得た文字起こしを WebSocket でクライアントに返送
-- クライアント切断時に STT セッションをクリーンアップ
-
-### ステップ 3: Google Cloud STT 統合
-
-`backend/stt.js` を実装：
-
-- `@google-cloud/speech` の `SpeechClient` をシングルトンで初期化
-- `streamingRecognize` を使ったストリーミング音声認識セッションを返す関数を提供
-- 設定:
-  - `languageCode: 'ja-JP'`
-  - `encoding: 'WEBM_OPUS'`（Chrome/Edge）または `'MP4'`（iOS Safari）
-  - `sampleRateHertz: 48000`（WebM/Opus 標準）
-  - `interimResults: true`（リアルタイム逐次結果）
-  - `enableAutomaticPunctuation: true`
-- 認識結果を `{ transcript, isFinal }` 形式でコールバック
-- エラーハンドリング（接続切断、タイムアウト等）
-
-### ステップ 4: ローカル動作確認
-
-`scripts/test-backend.mjs` を新規作成し、以下を確認：
-
-- `/health` が 200 を返すか
-- WebSocket 接続が確立できるか
-- ダミー音声データを送って STT に転送できるか（実音声テストは後）
-
-`package.json`（プロジェクトルート）に以下を追加：
-
-```json
-{
-  "scripts": {
-    "dev:backend": "cd backend && npm run dev",
-    "test:backend": "node scripts/test-backend.mjs"
-  }
-}
-```
-
-### 完了報告（Phase 1 完了時）
-
-- backend 起動コマンド
-- /health の動作確認結果
-- WebSocket 接続テスト結果
-- 副田に渡す事前準備チェックリスト（credentials.json の配置等）
-
----
-
-## Phase 2: フロントエンド実装
-
-### ステップ 5: 録音ユーティリティ
-
-`lib/voiceRecorder.ts` を新規作成：
-
-- `MediaRecorder API` のラッパー
-- ブラウザ別の MIME タイプ自動選択（WebM/Opus or MP4）
+- ブラウザ別の MIME タイプ自動選択（pickMime パターン、yorisoi-demo の LIFF index.html を参考）
 - 録音開始・停止・一時停止
-- 録音中の音量レベルを取得（波形表示用、`AnalyserNode` 使用）
-- エラーハンドリング（マイク権限拒否等）
+- 録音中の経過時間取得
+- 録音中の音量レベル取得（`AnalyserNode` 使用、任意機能）
+- エラーハンドリング（マイク権限拒否、デバイス未接続等）
 
-シグネチャ例：
+#### シグネチャ
 
 ```typescript
 export interface VoiceRecorderOptions {
-  onChunk: (chunk: Blob) => void;
-  onLevelUpdate?: (level: number) => void; // 0-1
-  onError: (error: Error) => void;
+  /** チャンク受信時のコールバック（任意、デフォルトは録音完了時に全体を渡す） */
+  onChunk?: (chunk: Blob) => void;
+  /** 音量レベル更新コールバック（0-1） */
+  onLevelUpdate?: (level: number) => void;
+  /** エラー発生時のコールバック */
+  onError: (error: VoiceRecorderError) => void;
+}
+
+export class VoiceRecorderError extends Error {
+  constructor(
+    message: string,
+    public code: 'PERMISSION_DENIED' | 'NO_DEVICE' | 'NOT_SUPPORTED' | 'UNKNOWN',
+    public originalError?: unknown
+  ) {
+    super(message);
+    this.name = 'VoiceRecorderError';
+  }
 }
 
 export class VoiceRecorder {
+  /** 録音開始 */
   async start(options: VoiceRecorderOptions): Promise<void>;
-  async stop(): Promise<Blob>; // 全体音声を返す
+  
+  /** 録音停止、全体音声を Blob で返す */
+  async stop(): Promise<Blob>;
+  
+  /** 一時停止 */
   pause(): void;
+  
+  /** 再開 */
   resume(): void;
+  
+  /** 現在の MIME タイプ取得 */
   getMimeType(): string;
-  getDuration(): number; // ms
+  
+  /** 経過時間（ミリ秒） */
+  getDuration(): number;
+  
+  /** 録音状態 */
+  getState(): 'inactive' | 'recording' | 'paused';
 }
 ```
 
-### ステップ 6: WebSocket クライアント
+#### 内部実装の要点
 
-`lib/wsClient.ts` を新規作成：
+- MIME タイプ候補（優先順）:
+  1. `'audio/webm;codecs=opus'` (Chrome/Edge)
+  2. `'audio/mp4'` (iOS Safari)
+  3. `'audio/webm'` (Firefox)
+- `MediaRecorder.isTypeSupported()` で動的選択
+- `getUserMedia({ audio: true })` でストリーム取得
+- マイク権限拒否時は `VoiceRecorderError('PERMISSION_DENIED')` を throw
 
-- WebSocket 接続管理
-- 音声チャンクを WebSocket で送信
-- サーバーからの文字起こし結果を受信
-- 自動再接続（指数バックオフ）
-- エラーハンドリング
+### 動作確認
 
-シグネチャ例：
+ブラウザコンソールで動作確認するためのテストファイルは作成不要。
+ステップ3の VoiceRecorder.tsx を経由して動作確認する。
+
+### 完了条件
+
+- ファイル作成
+- TypeScript 型チェック通過（`npx tsc --noEmit`）
+- 副田レビュー後、ステップ2に進む
+
+---
+
+## ステップ 2: 音声 → SOAP 生成ロジック
+
+### 新規ファイル: `lib/audioToSoap.ts`
+
+Gemini Audio に音声 + プロンプトを送信し、SOAP を生成する関数。
+
+#### 設計方針
+
+既存 `lib/generateSoap.ts`（テキスト入力版）と並列に新規実装。
+既存ファイルは変更しない。プロンプトは既存の `lib/soapPrompt.v3.ts` を流用する。
+
+ただし、**音声入力用のプロンプト調整**が必要：
+- 「箇条書きメモから」→「会話音声から」に文脈変更
+- 音声では薬剤名・用量が口頭で言われる前提（手動入力ほど明確ではない）
+- 発言主体タグ [本人][スタッフ] 等は引き続き必須
+
+#### シグネチャ
 
 ```typescript
-export interface TranscribeWsClientOptions {
-  url: string;
-  onTranscript: (transcript: string, isFinal: boolean) => void;
-  onError: (error: Error) => void;
-  onClose: () => void;
+import { ClinicalData } from '../types';
+
+export interface AudioToSoapInput {
+  audioBlob: Blob;
+  patientContext?: {
+    name?: string;
+    facility?: string;
+    age?: number;
+    conditions?: string[];
+  };
 }
 
-export class TranscribeWsClient {
-  async connect(options: TranscribeWsClientOptions): Promise<void>;
-  send(chunk: Blob): void;
-  disconnect(): void;
+export type GeneratedSoap = ClinicalData['soap'];
+
+export class AudioToSoapError extends Error {
+  constructor(
+    message: string,
+    public code: 'API_ERROR' | 'PARSE_ERROR' | 'TIMEOUT' | 'EMPTY_AUDIO' | 'TOO_LARGE' | 'INVALID_OUTPUT',
+    public originalError?: unknown
+  ) {
+    super(message);
+    this.name = 'AudioToSoapError';
+  }
+}
+
+export async function audioToSoap(
+  input: AudioToSoapInput
+): Promise<GeneratedSoap>;
+```
+
+#### 実装要件
+
+1. **入力バリデーション**
+   - audioBlob のサイズが 0 → `EMPTY_AUDIO`
+   - audioBlob のサイズが 20MB 超 → `TOO_LARGE`
+
+2. **音声を base64 化**
+   - `FileReader.readAsDataURL()` でBlob → data URL → base64 部分のみ抽出
+
+3. **Gemini API 呼び出し**
+   - 既存 `getGeminiModel()` を使用
+   - `contents` の parts に inlineData（音声）+ text（プロンプト）を含める
+   - `responseMimeType: 'application/json'`
+   - `responseSchema: buildSoapJsonSchema(DEFAULT_SOAP_PROMPT_CONFIG)` を流用
+   - `temperature: 0.3`
+   - タイムアウト 60秒（音声処理は時間がかかる）
+
+4. **プロンプト構築**
+   - 既存 `buildSoapPrompt(DEFAULT_SOAP_PROMPT_CONFIG)` の systemPrompt を流用
+   - そこに「音声会話の文字起こしから SOAP を生成する」旨を追加
+   - patientContext があれば「対象患者: 〇〇、訪問先: 〇〇」をユーザーメッセージに
+
+5. **エラーハンドリング**
+   - try-catch で全体を包む
+   - Gemini API のエラーは AudioToSoapError でラップ
+
+#### 動作確認スクリプト
+
+`scripts/test-audio-to-soap.mjs` を新規作成（Node.js で実行可能な形）。
+ただし、Node 環境でブラウザ録音はできないため、**事前に録音済みの音声ファイル**を使う設計：
+
+```javascript
+// scripts/test-audio-to-soap.mjs
+import fs from 'fs';
+// audioToSoap を Node 環境でも動かせるように、Blob のような薄いインターフェースを満たす
+
+// テストケース:
+// 1. fixtures/sample-recording.webm を読む（事前に副田が録音して配置）
+// 2. audioToSoap に渡す
+// 3. SOAP が返ることを確認
+```
+
+サンプル音声は副田が手動で用意。`fixtures/` フォルダに配置する旨を README に記載。
+
+`package.json` に追加：
+```json
+{
+  "scripts": {
+    "test:audio-to-soap": "node scripts/test-audio-to-soap.mjs"
+  }
 }
 ```
 
-### ステップ 7: 文字起こし → 箇条書き整形
+### 完了条件
 
-`lib/transcriptToBullets.ts` を新規作成：
+- `lib/audioToSoap.ts` 作成
+- `scripts/test-audio-to-soap.mjs` 作成
+- TypeScript 型チェック通過
+- 副田レビュー後、ステップ3に進む
 
-文字起こしテキストを既存 `generateSoap` が処理しやすい箇条書き形式に変換する関数。
+---
 
-- 入力: 改行・句読点を含む生テキスト
-- 出力: 箇条書き形式（`- ` 始まり）
-- 既存 `generateSoap` の `bulletInput` パラメータに渡せる形式
+## ステップ 3: 録音 UI コンポーネント
 
-簡単な実装：句読点で区切って各文を `- ` プレフィックス付きで返す程度で十分。
-LLM を使った高度な整形は Phase 2 で検討。
+### 新規ファイル: `components/VoiceRecorder.tsx`
 
-### ステップ 8: 録音 UI コンポーネント
+録音操作の UI コンポーネント。
 
-`components/VoiceRecorder.tsx` を新規作成：
+#### Props
 
-- 「録音開始」「録音停止」ボタン
-- 録音中の経過時間表示（mm:ss）
-- 音量レベルの可視化（簡易バーまたは波形）
-- マイク権限エラー時の表示
-- props で onComplete (audio: Blob, transcript: string) コールバック
+```typescript
+export interface VoiceRecorderProps {
+  /** 録音完了時のコールバック（音声 Blob と録音時間を渡す） */
+  onComplete: (audio: Blob, durationMs: number) => void;
+  
+  /** エラー時のコールバック */
+  onError: (error: Error) => void;
+  
+  /** 録音をキャンセル */
+  onCancel?: () => void;
+  
+  /** 操作無効化 */
+  disabled?: boolean;
+}
+```
 
-`components/TranscriptDisplay.tsx` を新規作成：
+#### UI 構成
 
-- リアルタイム文字起こし結果の表示
-- 確定済みテキスト（`isFinal: true`）と暫定テキスト（`isFinal: false`）を視覚的に区別
-- 自動スクロール
+3つの状態:
 
-### ステップ 9: 「録音から作成」モードの本実装パネル
+**状態1: 待機中（録音前）**
+```
+┌─────────────────────────────┐
+│        🎤 録音開始           │
+│        (大きなボタン)         │
+└─────────────────────────────┘
+```
 
-`components/RecordingPanel.tsx` を新規作成：
+**状態2: 録音中**
+```
+┌─────────────────────────────┐
+│   ●  録音中  00:42          │
+│   ━━━━━━━━━━━━━━━ (音量バー)│
+│   [一時停止] [停止]         │
+└─────────────────────────────┘
+```
 
-UI 構成：
+**状態3: 録音停止後の確認**
+```
+┌─────────────────────────────┐
+│   録音完了 (3分12秒)         │
+│   [SOAP生成] [破棄してやり直し]│
+└─────────────────────────────┘
+```
+
+#### スタイル
+
+既存 Tailwind パターンに準拠:
+- 録音ボタン（待機中）: `bg-red-500 text-white` で赤系、目立たせる
+- 録音中表示: `bg-red-50 border-red-200`
+- 停止ボタン: `bg-gray-700 text-white`
+- 音量バー: `bg-teal-500` で teal 系（既存配色）
+
+#### 内部実装
+
+`lib/voiceRecorder.ts` の `VoiceRecorder` クラスをラップ。
+React の useState / useRef / useEffect で状態管理。
+
+### 完了条件
+
+- `components/VoiceRecorder.tsx` 作成
+- 単体動作確認はステップ4と統合して実施
+- TypeScript 型チェック通過
+
+---
+
+## ステップ 4: 録音から作成パネル（メインビュー）
+
+### 新規ファイル: `components/RecordingPanel.tsx`
+
+「録音から作成」モードのメインコンポーネント。
+
+#### UI 構成
 
 ```
 ┌─────────────────────────────────────────┐
 │ ヘッダー：「録音から SOAP 作成」          │
 ├─────────────────────────────────────────┤
-│ 1. 訪問先選択（既存 FACILITIES）          │
-│ 2. 患者選択（既存 roster）                │
-│ 3. 録音セクション                         │
-│    ├─ VoiceRecorder（録音 UI）            │
-│    └─ TranscriptDisplay（リアルタイム表示）│
+│ 1. 訪問先選択（既存FACILITIES）          │
+│ 2. 患者選択（既存roster or 新規入力）    │
+│ 3. 日付指定（デフォルト今日）            │
 ├─────────────────────────────────────────┤
-│ ローディング: 「SOAP を生成中...」        │
+│ VoiceRecorder コンポーネント            │
 ├─────────────────────────────────────────┤
-│ 生成後: QuickSoapEditor                   │
-│   + [保存][再生成][クリア] ボタン         │
+│ ローディング: 「SOAP を生成中... 約30秒」│
+├─────────────────────────────────────────┤
+│ 生成後: QuickSoapEditor                  │
+│   + [保存][クリア] ボタン                │
 │   + buildQuickSoapText でのコピー表示    │
 └─────────────────────────────────────────┘
 ```
 
-フロー：
+#### フロー
 
-1. 訪問先・患者を選択
-2. 録音開始 → リアルタイム文字起こし表示
-3. 録音停止 → 文字起こし完成
-4. 自動で `transcriptToBullets` で箇条書き化
-5. `generateSoap` 呼び出し（既存ロジック流用）
-6. SOAP 表示・編集
+1. 訪問先・患者・日付を選択
+2. VoiceRecorder で録音開始 → 経過時間表示
+3. 録音停止 → 「SOAP生成」ボタンで実行
+4. ローディング表示
+5. `audioToSoap` 呼び出し
+6. SOAP を `QuickSoapEditor` で表示・編集
 7. `QuickSoapRecord` として `saveQuickSoap` で保存
-8. 履歴に追加（既存 storage に保存）
+8. 履歴に追加（既存 storage）
 
-### ステップ 10: App.tsx の統合
+#### 既存パターンとの一貫性
 
-既存 `App.tsx` の変更：
+既存 `components/QuickSoapPanel.tsx` の構造を**ほぼそのまま流用**。
+違いは VoiceRecorder + audioToSoap だけ。
 
-- `mode === 'recording'` の時の表示を、既存モック UI から `RecordingPanel` に置き換え
-- ただし、**既存のラウンド一覧 UI は別タブとして残す**（モックデータも保持）
-- もしくはサイドバー上部に「録音 / モック表示」のサブタブを追加するか相談
+### 完了条件
 
-**最小変更原則**: `App.tsx` の変更は10〜30行程度に収める。
-大きな変更が必要な場合は、`RecordingPanel` 側で吸収する設計にする。
-
-### 環境変数
-
-フロント側で WebSocket URL を環境変数化：
-
-`.env.local` に追加：
-
-```
-VITE_WS_URL=ws://localhost:8080/ws/transcribe
-```
-
-`vite.config.ts` で define する。
+- `components/RecordingPanel.tsx` 作成
+- 一連フローが localhost で動作
+- TypeScript 型チェック通過
+- 副田レビュー後、ステップ5に進む
 
 ---
 
-## Phase 3: 動作確認・デプロイ
+## ステップ 5: App.tsx の統合
 
-### ステップ 11: ローカル E2E 動作確認
+### 変更ファイル: `App.tsx`
 
-ローカル環境（macOS Safari, Chrome）で以下を確認：
+既存「録音から作成」モード（`mode === 'recording'`）の表示を、モック UI から `RecordingPanel` に置き換える。
 
-1. `npm run dev:backend` でバックエンド起動
-2. `npm run dev` でフロント起動
-3. ブラウザでアクセス
-4. 録音開始 → リアルタイム文字起こし表示
-5. 録音停止 → SOAP 生成
-6. 保存 → 履歴に追加
-7. 既存「メモから作成」「履歴」が動作することを確認
+#### 変更方針
 
-### ステップ 12: デプロイ準備
+**最小変更原則**: `App.tsx` の変更は **30 行程度** に収める。
+既存の record モックUI（ラウンド一覧・名簿・セグメント）は、サブモードとして残すか、丸ごと差し替えるか相談。
 
-**バックエンド**:
-- `backend/Dockerfile` を作成（Cloud Run 用）
-- `backend/README.md` にデプロイコマンド記載：
+#### 推奨アプローチ
 
-```bash
-gcloud builds submit --tag gcr.io/PROJECT_ID/yorisoi-shisetsu-backend backend/
-gcloud run deploy yorisoi-shisetsu-backend \
-  --image gcr.io/PROJECT_ID/yorisoi-shisetsu-backend \
-  --region asia-northeast1 \
-  --allow-unauthenticated \
-  --set-env-vars=NODE_ENV=production,ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+```typescript
+// App.tsx の該当箇所
+{mode === 'recording' && (
+  <RecordingPanel 
+    onSaved={(record) => {
+      showToast('success', 'SOAPを保存しました');
+      // 必要なら履歴タブに自動遷移
+    }}
+  />
+)}
 ```
 
-**フロント**:
-- Vercel デプロイ手順を `docs/deploy.md` に記載
-- 環境変数 `VITE_WS_URL` を本番 Cloud Run URL に書き換え
+これにより、既存のモックUI は不要になる。ただし、**急に消すと参照が壊れる可能性**があるので、慎重に。
 
-実際のデプロイは副田が手動で実施するため、Cursor はドキュメント作成までで OK。
+#### モックUI の扱い
+
+選択肢:
+- A. モックUIは完全削除（クリーンだが、過去資産を捨てる）
+- B. モックUIは別パスで残す（mode を `'recording-mock'` 等に変更、サイドバーに切替UI追加）
+- C. モックUIは残すが、訪問薬剤師向けデモでは表示しない（display: none）
+
+**推奨は A**: 録音機能が完成したら、モックUIの存在価値は薄い。
+ただし、既存の `data/rounds.ts`, `data/mockData.ts` は他で参照されている可能性があるので、削除は控える。
+
+### 完了条件
+
+- `App.tsx` 変更
+- localhost で「録音から作成」モードが新実装に切り替わる
+- 既存「メモから作成」「履歴」モードが影響を受けない
+- TypeScript 型チェック通過
+- 副田レビュー
 
 ---
 
-## 完了報告フォーマット（各 Phase）
+## ステップ 6: デプロイ準備
+
+### Vercel デプロイ
+
+バックエンド不要なので、フロントをそのまま Vercel にデプロイ。
+
+#### 設定
+
+- Vercel プロジェクト作成（or 既存があれば連携）
+- 環境変数 `GEMINI_API_KEY` を Vercel に設定
+- リポジトリ連携 → 自動デプロイ
+
+#### `vercel.json`（必要なら）
+
+```json
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite"
+}
+```
+
+#### `docs/deploy.md` を新規作成
+
+Vercel デプロイ手順を文書化（副田が手動で実施するため）。
+
+### 完了条件
+
+- `docs/deploy.md` 作成
+- Vercel 設定の指示書記載
+- 実デプロイは副田が実施
+
+---
+
+## 想定スケジュール
+
+| ステップ | 内容 | 工数目安 |
+|---|---|---|
+| ステップ1 | voiceRecorder.ts | 半日 |
+| ステップ2 | audioToSoap.ts | 1日 |
+| ステップ3 | VoiceRecorder.tsx | 半日 |
+| ステップ4 | RecordingPanel.tsx | 1日 |
+| ステップ5 | App.tsx 統合 | 半日 |
+| ステップ6 | デプロイ準備 | 半日 |
+| **合計** | | **4-5日** |
+
+---
+
+## ⚠️ してはいけないこと
+
+- 既存「メモから作成」「履歴」モードの挙動変更
+- 既存 lib/ ファイル（`generateSoap.ts`, `soapPrompt.v3.ts`, `formatters.ts`, `quickSoapStorage.ts`）の機能変更
+- 既存 `components/` ファイル（`QuickSoapEditor.tsx`, `QuickSoapPanel.tsx`, `QuickSoapHistoryList.tsx`）の機能変更
+- 既存 `types.ts` の型変更
+- 大規模リファクタリング
+- バックエンド構築（Phase 0 で出した backend/ 計画は破棄）
+- WebSocket 実装
+- Google Cloud STT との接続
+- credentials.json 等の機密ファイルを Git にコミット
+- main ブランチへの直接 push
+- upstream（y-mori29/yorisoi-shisetsu）への push
+
+---
+
+## 既存資産の活用ルール
+
+| 既存ファイル | 活用方法 |
+|---|---|
+| `lib/geminiClient.ts` | そのまま流用（getGeminiModel） |
+| `lib/soapPrompt.v3.ts` | プロンプト構造をそのまま流用、音声用にメッセージ調整 |
+| `lib/generateSoap.ts` | 触らない（テキスト版として残す） |
+| `lib/formatters.ts` | buildQuickSoapText をそのまま使用 |
+| `lib/quickSoapStorage.ts` | 履歴保存にそのまま使用 |
+| `components/QuickSoapEditor.tsx` | SOAP編集UIとして再利用 |
+| `types.ts` の `QuickSoapRecord` | 履歴データ型として流用 |
+| 既存 Tailwind パターン（teal/slate/red） | 新規UIも同じ配色 |
+| 既存 Toast コンポーネント | 通知に使用 |
+
+---
+
+## 完了報告フォーマット（各ステップ）
 
 ```
-## Phase N 完了報告
+## ステップ N 完了報告
 
 ### 実装内容
 - xxx
@@ -416,7 +496,7 @@ gcloud run deploy yorisoi-shisetsu-backend \
 - ハッシュとメッセージ
 
 ### 動作確認結果
-- xxx（手動 or 自動テスト結果）
+- xxx
 
 ### 確認してほしいこと
 - xxx
@@ -425,71 +505,18 @@ gcloud run deploy yorisoi-shisetsu-backend \
 - xxx
 ```
 
-各 Phase 完了時に副田にレビュー依頼。承認後に次 Phase へ進む。
+各ステップ完了時に副田にレビュー依頼。承認後に次ステップへ進む。
 
 ---
 
-## ⚠️ してはいけないこと
+## 補足: Phase 0 調査結果の活用範囲
 
-- 既存「メモから作成」「履歴」モードの挙動変更
-- 既存ファイル（`lib/generateSoap.ts`, `lib/soapPrompt.v3.ts`, `lib/formatters.ts`, `lib/quickSoapStorage.ts`）の機能変更
-  - インポート追加・型追加は可だが、既存関数の挙動は変えない
-- 既存 `types.ts` の型変更（QuickSoapRecord 等はそのまま）
-- App.tsx の大規模リファクタリング（最小変更原則）
-- 認証実装（Phase 1 スコープ外）
-- DB 永続化（Phase 1 スコープ外）
-- credentials.json を Git にコミット
-- mainブランチへの直接 push（必ず feature/voice-recording ブランチで作業）
-- upstream（y-mori29/yorisoi-shisetsu）への push
+`docs/voice-feature-survey.md` の調査結果は以下の範囲で参考にする：
 
----
+- ✅ MIME タイプ選択パターン（pickMime）→ ステップ1で活用
+- ✅ MediaRecorder の使い方 → ステップ1で活用
+- ❌ Express + WebSocket バックエンド → v2 では不要
+- ❌ Google Cloud STT 統合 → v2 では不要
+- ❌ Cloud Run デプロイ → v2 では Vercel に変更
 
-## 既存資産の活用ルール
-
-| 既存ファイル | 活用方法 |
-|---|---|
-| `lib/generateSoap.ts` | 文字起こし → SOAP 生成にそのまま使う |
-| `lib/formatters.ts` | コピーテキスト生成にそのまま使う |
-| `lib/quickSoapStorage.ts` | 履歴保存にそのまま使う |
-| `components/QuickSoapEditor.tsx` | SOAP 編集 UI として再利用 |
-| `types.ts` の `QuickSoapRecord` | 履歴データ型として流用 |
-| 既存 Tailwind パターン（teal/slate） | 新規 UI も同じ配色 |
-| 既存 Toast コンポーネント | エラー通知・保存通知に使用 |
-
----
-
-## 補足: 音声フォーマットの取り扱い
-
-ブラウザ別の挙動：
-
-| ブラウザ | デフォルト MIME |
-|---|---|
-| Chrome / Edge | `audio/webm; codecs=opus` |
-| Firefox | `audio/webm; codecs=opus` |
-| iOS Safari 16+ | `audio/mp4` |
-| Android Chrome | `audio/webm; codecs=opus` |
-
-Phase 1 では Chrome / iOS Safari 対応を最優先。
-`MediaRecorder.isTypeSupported()` で動的に選択。
-
-サーバー側（STT）の対応：
-- WebM/Opus → そのまま受け付け可能
-- MP4 → ffmpeg で WAV/PCM に変換が必要
-
-ffmpeg 統合は Phase 1 では「Chrome/Edge 限定で OK」とし、
-iOS Safari 対応は Phase 1.5 として別途扱う。
-**Phase 1 ではまず Chrome で動かす**。
-
----
-
-## 想定スケジュール
-
-| Phase | 内容 | 工数目安 |
-|---|---|---|
-| Phase 0 | 参考リポ調査 | 1日 |
-| Phase 1 | バックエンド構築（ステップ1-4） | 3-4日 |
-| Phase 2 | フロント実装（ステップ5-10） | 4-5日 |
-| Phase 3 | 動作確認・デプロイ準備（ステップ11-12） | 2-3日 |
-| **合計** | | **10-13日（約2週間）** |
-
-各 Phase 完了時に副田レビューを挟むため、暦日換算で **2〜3週間** を見込む。
+つまり、フロント側のパターンのみ参考にする。バックエンド側は完全に破棄。
