@@ -94,3 +94,22 @@ export interface Round {
   facilityId: string;
   segments: RoundSegment[];
 }
+
+export interface QuickSoapRecord {
+  id: string;
+  facilityId: string | null;
+  rosterPatientId: string | null;
+  patientNameOverride?: string;
+  date: string;
+  bulletInput: string;
+  soap: ClinicalData['soap'];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QuickSoapFilter {
+  facilityId?: string;
+  rosterPatientId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}

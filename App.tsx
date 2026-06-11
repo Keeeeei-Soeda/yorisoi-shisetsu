@@ -2,6 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { FACILITIES, ROUNDS } from './data/rounds';
 import { ClinicalData, Facility, Round, RoundSegment, RosterPatient } from './types';
 import { SectionHeader } from './components/SectionHeader';
+import { QuickSoapHistoryList } from './components/QuickSoapHistoryList';
+import { QuickSoapPanel } from './components/QuickSoapPanel';
+
+type AppMode = 'recording' | 'memo' | 'history';
 
 const Toast = ({ message, type, show }: { message: string; type: 'success' | 'info'; show: boolean }) => {
   return (
@@ -76,6 +80,7 @@ const PatientRosterBadge: React.FC<{ patient: RosterPatient }> = ({ patient }) =
 );
 
 function App() {
+  const [mode, setMode] = useState<AppMode>('recording');
   const [selectedRoundId, setSelectedRoundId] = useState<string>(ROUNDS[0]?.id ?? '');
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' as 'success' | 'info' });
   const [assignments, setAssignments] = useState<Record<string, { rosterPatientId: string | null; status: 'unconfirmed' | 'confirmed' }>>(() => {
@@ -210,25 +215,69 @@ function App() {
     return roster ? { name: roster.name, room: roster.room, kana: roster.kana } : { name: '未確定' };
   };
 
+  const modeTabClass = (target: AppMode) =>
+    `flex-1 px-2 py-2 text-xs font-bold rounded border transition ${
+      mode === target
+        ? 'bg-teal-500 text-white border-teal-600'
+        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+    }`;
+
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800">
       <aside className="w-full md:w-96 border-r border-gray-200 bg-white flex flex-col h-full overflow-hidden shadow-sm">
-        <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-teal-50 to-white">
-          <h1 className="text-xl font-bold text-gray-800">訪問診療ラウンド一覧</h1>
-          <p className="text-sm text-gray-500">日付・施設から対象ラウンドを選択してください</p>
+        <div className="p-4 border-b border-gray-200 bg-gradient-to-br from-teal-50 to-white space-y-3">
+          <h1 className="text-xl font-bold text-gray-800">よりそい Pro</h1>
+          <div className="flex gap-1">
+            <button type="button" className={modeTabClass('recording')} onClick={() => setMode('recording')}>
+              録音から作成
+            </button>
+            <button type="button" className={modeTabClass('memo')} onClick={() => setMode('memo')}>
+              メモから作成
+            </button>
+            <button type="button" className={modeTabClass('history')} onClick={() => setMode('history')}>
+              履歴
+            </button>
+          </div>
+          {mode === 'recording' && (
+            <p className="text-sm text-gray-500">日付・施設から対象ラウンドを選択してください</p>
+          )}
+          {mode === 'memo' && (
+            <p className="text-sm text-gray-500">箇条書きメモから SOAP を生成します</p>
+          )}
+          {mode === 'history' && (
+            <p className="text-sm text-gray-500">保存済み SOAP の履歴を確認・編集できます</p>
+          )}
         </div>
-        <div className="p-4 flex-1 overflow-y-auto flex flex-col gap-3">
-          {ROUNDS.map(renderRoundCard)}
-        </div>
-        <div className="p-4 border-t border-gray-200 bg-gray-50 text-xs text-gray-500">
-          録音から自動分割された患者ブロックを、施設名簿と突合して確定するフローです。
-        </div>
+        {mode === 'recording' && (
+          <>
+            <div className="p-4 flex-1 overflow-y-auto flex flex-col gap-3">
+              {ROUNDS.map(renderRoundCard)}
+            </div>
+            <div className="p-4 border-t border-gray-200 bg-gray-50 text-xs text-gray-500">
+              録音から自動分割された患者ブロックを、施設名簿と突合して確定するフローです。
+            </div>
+          </>
+        )}
+        {mode === 'memo' && (
+          <div className="p-4 flex-1 overflow-y-auto text-sm text-gray-600 space-y-3">
+            <p>右側のフォームで訪問先・患者・メモを入力し、「SOAP生成」を押してください。</p>
+            <p className="text-xs text-gray-500">生成後は各セクションを編集して保存できます。</p>
+          </div>
+        )}
+        {mode === 'history' && (
+          <div className="p-4 flex-1 overflow-y-auto text-sm text-gray-600 space-y-3">
+            <p>右側で施設・患者・日付を絞り込み、履歴を選択して編集できます。</p>
+          </div>
+        )}
       </aside>
 
       <main className="flex-1 overflow-y-auto">
-        {!selectedRound || !currentFacility ? (
-          <div className="h-full flex items-center justify-center text-gray-400">ラウンドを選択してください</div>
-        ) : (
+        {mode === 'memo' && <QuickSoapPanel onToast={showToast} />}
+        {mode === 'history' && <QuickSoapHistoryList onToast={showToast} />}
+        {mode === 'recording' && (
+          !selectedRound || !currentFacility ? (
+            <div className="h-full flex items-center justify-center text-gray-400">ラウンドを選択してください</div>
+          ) : (
           <div className="max-w-6xl mx-auto p-6 space-y-6">
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <div className="flex items-start justify-between gap-4">
@@ -350,6 +399,7 @@ function App() {
               })}
             </div>
           </div>
+          )
         )}
       </main>
 
