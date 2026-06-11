@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:gemini": "node scripts/test-gemini.mjs",
-    "test:generate-soap": "node --experimental-strip-types scripts/test-generate-soap.ts",
+    "test:generate-soap": "node --experimental-strip-types scripts/test-generate-soap.mjs",
     "test:soap-examples": "node --experimental-strip-types scripts/test-soap-examples.ts"
   },
   "dependencies": {

@@ -5,10 +5,8 @@ import {
   buildSoapUserMessage,
   DEFAULT_SOAP_PROMPT_CONFIG,
 } from './soapPrompt.ts';
-import type { SoapPromptConfig } from './soapPrompt.ts';
 
-/** SOAP 生成のタイムアウト（要件: 30秒以内） */
-export const GENERATE_SOAP_TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 30_000;
 
 export interface GenerateSoapInput {
   bulletInput: string;
@@ -22,9 +20,20 @@ export interface GenerateSoapInput {
 
 export type GeneratedSoap = ClinicalData['soap'];
 
-export interface GenerateSoapOptions {
-  promptConfig?: SoapPromptConfig;
-  timeoutMs?: number;
+export class SoapGenerationError extends Error {
+  code: 'API_ERROR' | 'PARSE_ERROR' | 'TIMEOUT' | 'EMPTY_INPUT' | 'INVALID_OUTPUT';
+  originalError?: unknown;
+
+  constructor(
+    message: string,
+    code: 'API_ERROR' | 'PARSE_ERROR' | 'TIMEOUT' | 'EMPTY_INPUT' | 'INVALID_OUTPUT',
+    originalError?: unknown,
+  ) {
+    super(message);
+    this.name = 'SoapGenerationError';
+    this.code = code;
+    this.originalError = originalError;
+  }
 }
 
 function isGeneratedSoap(value: unknown): value is GeneratedSoap {
@@ -38,100 +47,75 @@ function isGeneratedSoap(value: unknown): value is GeneratedSoap {
   );
 }
 
+function validateInput(bulletInput: string): string {
+  const trimmed = bulletInput.trim();
+  if (!trimmed) {
+    throw new SoapGenerationError('入力が空です', 'EMPTY_INPUT');
+  }
+  if (trimmed.length < 10) {
+    throw new SoapGenerationError('入力が短すぎます', 'EMPTY_INPUT');
+  }
+  return trimmed;
+}
+
 function parseSoapResponse(text: string): GeneratedSoap {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
-  } catch {
-    throw new Error('Gemini API のレスポンスを JSON として解析できませんでした');
+  } catch (error) {
+    throw new SoapGenerationError('AIレスポンスのパースに失敗', 'PARSE_ERROR', error);
   }
   if (!isGeneratedSoap(parsed)) {
-    throw new Error(
-      'Gemini API のレスポンスが SOAP 形式（subjective / objective / assessment / plan）と一致しません',
-    );
+    throw new SoapGenerationError('AIレスポンスのフォーマットが不正', 'INVALID_OUTPUT');
   }
   return parsed;
-}
-
-function createTimeoutError(timeoutMs: number): Error {
-  const error = new Error(`SOAP 生成が ${timeoutMs / 1000} 秒以内に完了しませんでした`);
-  error.name = 'GenerateSoapTimeoutError';
-  return error;
-}
-
-function isNetworkError(message: string): boolean {
-  const lower = message.toLowerCase();
-  return (
-    lower.includes('fetch failed') ||
-    lower.includes('network') ||
-    lower.includes('econnrefused') ||
-    lower.includes('enotfound') ||
-    lower.includes('socket')
-  );
-}
-
-function wrapGenerateSoapError(error: unknown): Error {
-  if (error instanceof Error) {
-    if (error.name === 'GenerateSoapTimeoutError') return error;
-    if (error.message.includes('GEMINI_API_KEY')) return error;
-    if (error.message.includes('箇条書きメモが空')) return error;
-    if (error.message.includes('JSON として解析') || error.message.includes('SOAP 形式')) return error;
-
-    if (isNetworkError(error.message)) {
-      return new Error(`ネットワークエラー: Gemini API に接続できませんでした（${error.message}）`);
-    }
-
-    return new Error(`Gemini API エラー: ${error.message}`);
-  }
-  return new Error('SOAP 生成中に不明なエラーが発生しました');
 }
 
 /**
  * 箇条書きメモから SOAP 4セクションを Gemini structured output で生成する。
  */
-export async function generateSoap(
-  input: GenerateSoapInput,
-  options: GenerateSoapOptions = {},
-): Promise<GeneratedSoap> {
-  const trimmedInput = input.bulletInput.trim();
-  if (!trimmedInput) {
-    throw new Error('箇条書きメモが空です');
-  }
+export async function generateSoap(input: GenerateSoapInput): Promise<GeneratedSoap> {
+  const trimmedInput = validateInput(input.bulletInput);
 
-  const promptConfig = options.promptConfig ?? DEFAULT_SOAP_PROMPT_CONFIG;
-  const timeoutMs = options.timeoutMs ?? GENERATE_SOAP_TIMEOUT_MS;
-  const { systemPrompt, jsonSchema } = buildSoapPrompt(promptConfig);
+  const config = DEFAULT_SOAP_PROMPT_CONFIG;
+  const { systemPrompt, jsonSchema } = buildSoapPrompt(config);
   const userMessage = buildSoapUserMessage(trimmedInput, input.patientContext);
 
   const model = getGeminiModel();
-  const generatePromise = model.generateContent({
-    contents: [
-      { role: 'user', parts: [{ text: systemPrompt }] },
-      { role: 'user', parts: [{ text: userMessage }] },
-    ],
-    generationConfig: {
-      responseMimeType: 'application/json',
-      responseSchema: jsonSchema,
-    },
-  });
 
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(createTimeoutError(timeoutMs)), timeoutMs);
+    setTimeout(
+      () => reject(new SoapGenerationError('SOAP生成がタイムアウトしました（30秒）', 'TIMEOUT')),
+      TIMEOUT_MS,
+    );
   });
 
   try {
-    const result = await Promise.race([generatePromise, timeoutPromise]);
+    const result = await Promise.race([
+      model.generateContent({
+        contents: [
+          { role: 'user', parts: [{ text: systemPrompt }] },
+          { role: 'user', parts: [{ text: userMessage }] },
+        ],
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: jsonSchema,
+          temperature: 0.3,
+        },
+      }),
+      timeoutPromise,
+    ]);
+
     const text = result.response.text();
     if (!text) {
-      throw new Error('Gemini API から空のレスポンスが返されました');
+      throw new SoapGenerationError('AIレスポンスのフォーマットが不正', 'INVALID_OUTPUT');
     }
+
     return parseSoapResponse(text);
   } catch (error) {
-    throw wrapGenerateSoapError(error);
-  } finally {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
+    if (error instanceof SoapGenerationError) {
+      throw error;
     }
+    throw new SoapGenerationError('API呼び出しエラー', 'API_ERROR', error);
   }
 }
